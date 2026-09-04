@@ -157,6 +157,18 @@
             border-color: #ef4444;
         }
 
+        .error-log {
+            background: #27272a;
+            color: #f87171;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: left;
+            font-family: monospace;
+            font-size: 0.8rem;
+            margin-top: 10px;
+            word-break: break-all;
+        }
+
         @media (max-width: 640px) {
             body { padding: 0; justify-content: flex-start; }
             .container { border: none; border-radius: 0; height: 100vh; }
@@ -172,8 +184,8 @@
     <div class="container">
         <div class="header">
             <div class="title-area">
-                <h2>Browser VM (Safe Mode)</h2>
-                <p>GitHub Pages / CDN Compatible</p>
+                <h2>Browser VM (Debug Mode)</h2>
+                <p>GitHub Pages Safe</p>
             </div>
             <div class="status-badge">
                 <div id="statusDot" class="status-dot"></div>
@@ -190,7 +202,6 @@
         <div class="controls">
             <div class="control-group">
                 <select id="osSelect">
-                    <!-- Under 20MB limit images -->
                     <option value="kolibri">KolibriOS (Graphical Desktop - 1.4MB)</option>
                     <option value="linux">Buildroot Linux (CLI - 18MB)</option>
                 </select>
@@ -200,20 +211,20 @@
         </div>
     </div>
 
-    <!-- v86 Engine Library via jsDelivr CDN -->
-    <script src="https://cdn.jsdelivr.net/gh/copy/v86@master/build/libv86.js"></script>
+    <!-- Switched to reliable unpkg CDN for the core engine -->
+    <script src="https://unpkg.com/v86/build/libv86.js"></script>
 
     <script>
         let emulator = null;
 
-        // Guaranteed to work on Github Pages - both under 20MB
+        // Using copy.sh direct paths (these officially allow CORS for everyone)
         const osConfigs = {
             kolibri: {
-                fda: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/images/kolibri.img" },
+                fda: { url: "https://copy.sh/v86/images/kolibri.img" },
                 memory: 64 * 1024 * 1024
             },
             linux: {
-                cdrom: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/images/linux4.iso" },
+                cdrom: { url: "https://copy.sh/v86/images/linux4.iso" },
                 memory: 128 * 1024 * 1024
             }
         };
@@ -238,42 +249,54 @@
             const container = document.getElementById("screen_container");
             container.innerHTML = "";
 
-            updateStatus(false, "Downloading OS Image...");
+            updateStatus(false, "Initializing Engine...");
 
             const selectedOS = document.getElementById("osSelect").value;
             const config = osConfigs[selectedOS];
 
             try {
-                // Initialize v86 configuration
+                // Determine the correct engine class name (different versions use V86 or V86Starter)
+                const EngineClass = typeof V86Starter !== 'undefined' ? V86Starter : (typeof V86 !== 'undefined' ? V86 : null);
+                
+                if (!EngineClass) {
+                    throw new Error("Library failed to load. Check your adblocker or internet connection.");
+                }
+
                 const v86Config = {
-                    wasm_path: "https://cdn.jsdelivr.net/gh/copy/v86@master/build/v86.wasm",
+                    wasm_path: "https://unpkg.com/v86/build/v86.wasm",
                     screen_container: container,
-                    bios: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/bios/seabios.bin" },
-                    vga_bios: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/bios/vgabios.bin" },
+                    bios: { url: "https://unpkg.com/v86/bios/seabios.bin" },
+                    vga_bios: { url: "https://unpkg.com/v86/bios/vgabios.bin" },
                     autostart: true,
                     memory: config.memory,
                     vga_memory: 2 * 1024 * 1024,
                 };
 
-                // Add the correct drive type (floppy vs cdrom) based on OS choice
                 if (config.fda) v86Config.fda = config.fda;
                 if (config.cdrom) v86Config.cdrom = config.cdrom;
 
-                emulator = new V86(v86Config);
+                // Boot the emulator
+                emulator = new EngineClass(v86Config);
 
-                // Update status when it starts reading the disk
                 emulator.add_listener("ide-read", function() {
                     updateStatus(true, "Running");
                 });
                 
-                // Fallback timeout to flag running state
                 setTimeout(() => {
                     if(emulator) updateStatus(true, "Running");
                 }, 3000);
 
             } catch (err) {
-                console.error("Emulator Boot Error:", err);
-                container.innerHTML = `<div class="screen-placeholder" style="color: #ef4444;">Initialization failed. Check your browser console.</div>`;
+                console.error("Boot Error:", err);
+                
+                // Print the exact error into the black screen box
+                container.innerHTML = `
+                    <div class="screen-placeholder">
+                        <strong style="color: #ef4444;">Crash Detected!</strong>
+                        <div class="error-log">${err.name}: ${err.message}</div>
+                        <p style="margin-top: 15px; font-size: 0.8rem;">Take a screenshot of this error if it keeps happening.</p>
+                    </div>
+                `;
                 updateStatus(false, "Error");
             }
         }
