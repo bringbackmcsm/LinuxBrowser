@@ -3,17 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WebOS - Browser Virtual Machine</title>
+    <title>Browser x86 Virtual Machine</title>
     <style>
         :root {
-            --bg-primary: #09090b;
-            --bg-secondary: #18181b;
-            --bg-tertiary: #27272a;
-            --accent: #3b82f6;
-            --accent-hover: #2563eb;
-            --text-main: #f4f4f5;
-            --text-muted: #a1a1aa;
-            --border: #3f3f46;
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --accent: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -27,59 +25,31 @@
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            padding: 16px;
+            padding: 12px;
         }
 
-        .container {
+        .vm-card {
             width: 100%;
-            max-width: 800px;
+            max-width: 720px;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
             overflow: hidden;
-            display: flex;
-            flex-direction: column;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
         }
 
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .vm-header {
             padding: 12px 16px;
-            background: var(--bg-tertiary);
+            background: rgba(0, 0, 0, 0.2);
             border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+            font-weight: 600;
         }
 
-        .title-area h2 { font-size: 1rem; font-weight: 600; }
-        .title-area p { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
-
-        .status-badge {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.75rem;
-            background: var(--bg-primary);
-            padding: 4px 8px;
-            border-radius: 20px;
-            border: 1px solid var(--border);
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #ef4444;
-            transition: background 0.3s ease;
-        }
-        .status-dot.running {
-            background: #22c55e;
-            box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
-        }
-
+        /* Essential container configuration required by v86 */
         #screen_container {
             width: 100%;
-            height: 450px;
+            height: 400px;
             background: #000;
             position: relative;
             display: flex;
@@ -88,239 +58,145 @@
             overflow: hidden;
         }
 
-        /* Essential elements for v86 to draw on */
-        #v86_display {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            height: 100%;
-        }
-
-        #v86_display canvas {
+        /* v86 internal canvas mapping elements */
+        #screen_container div, #screen_container canvas {
             max-width: 100%;
             max-height: 100%;
-            object-fit: contain;
         }
 
-        #overlay_text {
-            position: absolute;
-            color: var(--text-muted);
-            font-size: 0.9rem;
-            text-align: center;
-            padding: 20px;
-            z-index: 10;
-        }
-
-        .controls {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+        .vm-footer {
             padding: 12px 16px;
+            display: flex;
+            gap: 10px;
             background: var(--bg-secondary);
             border-top: 1px solid var(--border);
-            gap: 12px;
             flex-wrap: wrap;
         }
 
-        .control-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex: 1;
+        select, button {
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            border: 1px solid var(--border);
+            outline: none;
         }
 
         select {
+            flex: 1;
             background: var(--bg-primary);
             color: var(--text-main);
-            border: 1px solid var(--border);
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            outline: none;
-            width: 100%;
-            max-width: 260px;
             cursor: pointer;
         }
 
-        .btn {
+        button {
             background: var(--accent);
             color: white;
             border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 0.85rem;
             font-weight: 500;
             cursor: pointer;
         }
-        .btn:hover { background: var(--accent-hover); }
 
-        .btn-danger {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text-muted);
-        }
-        .btn-danger:hover {
-            background: rgba(239, 68, 68, 0.1);
-            color: #ef4444;
-            border-color: #ef4444;
+        button:active { opacity: 0.9; }
+
+        .btn-off {
+            background: #ef4444;
         }
 
-        .error-log {
-            background: #27272a;
-            color: #f87171;
-            padding: 12px;
-            border-radius: 6px;
-            text-align: left;
-            font-family: monospace;
-            font-size: 0.8rem;
-            margin-top: 10px;
-            word-break: break-all;
-        }
-
-        @media (max-width: 640px) {
-            body { padding: 0; justify-content: flex-start; }
-            .container { border: none; border-radius: 0; height: 100vh; }
+        @media (max-width: 600px) {
+            .vm-card { border: none; border-radius: 0; height: 100vh; display: flex; flex-direction: column; }
             #screen_container { flex: 1; height: auto; }
-            .controls { flex-direction: column; align-items: stretch; }
-            .control-group { width: 100%; }
-            select { max-width: none; }
+            .vm-footer { flex-direction: column; }
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <div class="header">
-            <div class="title-area">
-                <h2>Browser VM</h2>
-                <p>GitHub Pages Safe</p>
-            </div>
-            <div class="status-badge">
-                <div id="statusDot" class="status-dot"></div>
-                <span id="statusText">Offline</span>
-            </div>
+    <div class="vm-card">
+        <div class="vm-header">
+            <span>Virtual Machine Environment</span>
         </div>
 
+        <!-- The target container that v86 hooks into -->
         <div id="screen_container">
-            <div id="overlay_text">
-                Select an OS below and click <strong>Boot OS</strong>.
-            </div>
-            <!-- The exact elements v86 needs to render the screen -->
-            <div id="v86_display">
-                <div style="white-space: pre; font: 14px monospace; color: white;"></div>
-                <canvas style="display: none;"></canvas>
+            <div style="color: var(--text-muted); font-family: monospace; font-size: 0.85rem; text-align: center; padding: 20px;">
+                Press "Boot Virtual Machine" to initialize.
             </div>
         </div>
 
-        <div class="controls">
-            <div class="control-group">
-                <select id="osSelect">
-                    <option value="kolibri">KolibriOS (Graphical Desktop - 1.4MB)</option>
-                    <option value="linux">Buildroot Linux (CLI - 18MB)</option>
-                </select>
-                <button class="btn" onclick="startEmulator()">Boot OS</button>
-            </div>
-            <button class="btn btn-danger" onclick="stopEmulator()">Power Off</button>
+        <div class="vm-footer">
+            <select id="osSelect">
+                <option value="kolibri">KolibriOS (Graphical - 1.4MB)</option>
+                <option value="linux">Minimal Linux CLI (18MB)</option>
+            </select>
+            <button onclick="bootVM()">Boot Virtual Machine</button>
+            <button class="btn-off" onclick="shutdownVM()">Power Off</button>
         </div>
     </div>
 
-    <!-- Core Engine -->
-    <script src="https://unpkg.com/v86/build/libv86.js"></script>
+    <!-- Official v86 script loader library -->
+    <script src="https://cdn.jsdelivr.net/gh/copy/v86@master/build/libv86.js"></script>
 
     <script>
         let emulator = null;
 
-        const osConfigs = {
+        const profiles = {
             kolibri: {
-                fda: { url: "https://copy.sh/v86/images/kolibri.img" },
-                memory: 64 * 1024 * 1024
+                fda: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/images/kolibri.img" },
+                memory_size: 64 * 1024 * 1024
             },
             linux: {
-                cdrom: { url: "https://copy.sh/v86/images/linux4.iso" },
-                memory: 128 * 1024 * 1024
+                cdrom: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/images/linux4.iso" },
+                memory_size: 128 * 1024 * 1024
             }
         };
 
-        function updateStatus(running, text) {
-            const dot = document.getElementById("statusDot");
-            const statusText = document.getElementById("statusText");
-            if (running) {
-                dot.classList.add("running");
-            } else {
-                dot.classList.remove("running");
-            }
-            statusText.textContent = text;
-        }
-
-        function startEmulator() {
+        function bootVM() {
             if (emulator) {
                 emulator.destroy();
                 emulator = null;
             }
 
-            const overlay = document.getElementById("overlay_text");
-            const display = document.getElementById("v86_display");
-            
-            // Hide placeholder text, but DO NOT delete the canvas!
-            overlay.style.display = "none";
+            const container = document.getElementById("screen_container");
+            container.innerHTML = ""; // Clear text prompt safely before mounting canvas
 
-            updateStatus(false, "Initializing Engine...");
-
-            const selectedOS = document.getElementById("osSelect").value;
-            const config = osConfigs[selectedOS];
+            const profileKey = document.getElementById("osSelect").value;
+            const profile = profiles[profileKey];
 
             try {
-                const EngineClass = typeof V86Starter !== 'undefined' ? V86Starter : (typeof V86 !== 'undefined' ? V86 : null);
-                
-                if (!EngineClass) {
-                    throw new Error("Library failed to load.");
-                }
-
-                const v86Config = {
-                    wasm_path: "https://unpkg.com/v86/build/v86.wasm",
-                    screen_container: display, // Pass the inner display wrapper, not the main container
-                    bios: { url: "https://unpkg.com/v86/bios/seabios.bin" },
-                    vga_bios: { url: "https://unpkg.com/v86/bios/vgabios.bin" },
+                // Config layout based strictly on v86 specifications
+                const config = {
+                    wasm_path: "https://cdn.jsdelivr.net/gh/copy/v86@master/build/v86.wasm",
+                    screen_container: container,
+                    bios: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/bios/seabios.bin" },
+                    vga_bios: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/bios/vgabios.bin" },
+                    memory_size: profile.memory_size,
+                    vga_memory_size: 2 * 1024 * 1024,
                     autostart: true,
-                    memory: config.memory,
-                    vga_memory: 2 * 1024 * 1024,
                 };
 
-                if (config.fda) v86Config.fda = config.fda;
-                if (config.cdrom) v86Config.cdrom = config.cdrom;
+                if (profile.fda) config.fda = profile.fda;
+                if (profile.cdrom) config.cdrom = profile.cdrom;
 
-                emulator = new EngineClass(v86Config);
-
-                emulator.add_listener("ide-read", function() {
-                    updateStatus(true, "Running");
-                });
-                
-                setTimeout(() => {
-                    if(emulator) updateStatus(true, "Running");
-                }, 3000);
+                // Instantiate using V86Starter
+                emulator = new V86Starter(config);
 
             } catch (err) {
-                console.error("Boot Error:", err);
-                overlay.style.display = "block";
-                overlay.innerHTML = `
-                    <strong style="color: #ef4444;">Crash Detected!</strong>
-                    <div class="error-log">${err.name}: ${err.message}</div>
-                `;
-                updateStatus(false, "Error");
+                console.error("VM initialization error:", err);
+                container.innerHTML = `<div style="color: #ef4444; padding: 20px; font-family: monospace;">Boot Error: ${err.message}</div>`;
             }
         }
 
-        function stopEmulator() {
+        function shutdownVM() {
             if (emulator) {
                 emulator.destroy();
                 emulator = null;
             }
-            document.getElementById("overlay_text").style.display = "block";
-            document.getElementById("overlay_text").innerHTML = `
-                Virtual machine powered off. Select an OS and click <strong>Boot OS</strong>.
+            const container = document.getElementById("screen_container");
+            container.innerHTML = `
+                <div style="color: var(--text-muted); font-family: monospace; font-size: 0.85rem; text-align: center; padding: 20px;">
+                    Virtual machine powered off.
+                </div>
             `;
-            updateStatus(false, "Offline");
         }
     </script>
 </body>
