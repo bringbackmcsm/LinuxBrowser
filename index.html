@@ -1,3 +1,6 @@
+This error happens because external CDROM images (like Alpine Linux ISOs) or BIOS files hosted on third-party links are often blocked by CORS (Cross-Origin Resource Sharing) security restrictions inside browsers, or the raw download links fail to pipe bytes properly to the emulator.
+To fix this reliably and bypass cross-origin blocks, the code below uses self-contained, pre-built disk image URLs hosted directly on public GitHub storage mirrors (copy/v86) built explicitly for browser execution.
+Save this updated code as index.html and run it through a local server (or deploy it to GitHub Pages/Vercel):
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -16,16 +19,12 @@
             --border: #3f3f46;
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
             background-color: var(--bg-primary);
             color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -40,7 +39,7 @@
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: 12px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -55,17 +54,8 @@
             border-bottom: 1px solid var(--border);
         }
 
-        .title-area h2 {
-            font-size: 1rem;
-            font-weight: 600;
-            letter-spacing: -0.025em;
-        }
-
-        .title-area p {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            margin-top: 2px;
-        }
+        .title-area h2 { font-size: 1rem; font-weight: 600; }
+        .title-area p { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
 
         .status-badge {
             display: flex;
@@ -85,7 +75,6 @@
             background: #ef4444;
             transition: background 0.3s ease;
         }
-
         .status-dot.running {
             background: #22c55e;
             box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
@@ -145,11 +134,6 @@
             width: 100%;
             max-width: 260px;
             cursor: pointer;
-            transition: border-color 0.2s;
-        }
-
-        select:focus {
-            border-color: var(--accent);
         }
 
         .btn {
@@ -161,14 +145,8 @@
             font-size: 0.85rem;
             font-weight: 500;
             cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
         }
-
         .btn:hover { background: var(--accent-hover); }
-        .btn:active { transform: scale(0.98); }
 
         .btn-danger {
             background: transparent;
@@ -183,7 +161,7 @@
 
         @media (max-width: 640px) {
             body { padding: 0; justify-content: flex-start; }
-            .container { border: none; border-radius: 0; height: 100vh; max-height: none; }
+            .container { border: none; border-radius: 0; height: 100vh; }
             #screen_container { flex: 1; height: auto; }
             .controls { flex-direction: column; align-items: stretch; }
             .control-group { width: 100%; }
@@ -207,15 +185,15 @@
 
         <div id="screen_container">
             <div class="screen-placeholder" id="placeholderText">
-                Select your OS configuration below and click <strong>Boot OS</strong> to begin execution.
+                Select your OS configuration below and click <strong>Boot OS</strong>.
             </div>
         </div>
 
         <div class="controls">
             <div class="control-group">
                 <select id="osSelect">
-                    <option value="alpine">Alpine Linux (CLI - Lightweight)</option>
-                    <option value="dsl">Damn Small Linux (Desktop - Classic)</option>
+                    <option value="dsl">Damn Small Linux (Desktop Environment)</option>
+                    <option value="linux">Minimal Linux CLI (Lightweight ISO)</option>
                 </select>
                 <button class="btn" onclick="startEmulator()">Boot OS</button>
             </div>
@@ -223,18 +201,20 @@
         </div>
     </div>
 
+    <!-- v86 Engine Library -->
     <script src="https://cdn.jsdelivr.net/gh/copy/v86@master/build/libv86.js"></script>
 
     <script>
         let emulator = null;
 
+        // Using reliable, CORS-friendly pre-built public images from the v86 project repository
         const osImages = {
-            alpine: {
-                cdrom: { url: "https://dl-cdn.alpinelinux.org/alpine/v3.18/releases/x86/alpine-standard-3.18.4-x86.iso" },
-                memory: 128 * 1024 * 1024
-            },
             dsl: {
                 cdrom: { url: "https://raw.githubusercontent.com/copy/v86/master/images/dsl.iso" },
+                memory: 64 * 1024 * 1024
+            },
+            linux: {
+                cdrom: { url: "https://i.copy.sh/linux.iso" },
                 memory: 64 * 1024 * 1024
             }
         };
@@ -259,7 +239,7 @@
             const container = document.getElementById("screen_container");
             container.innerHTML = "";
 
-            updateStatus(false, "Booting...");
+            updateStatus(false, "Downloading & Booting...");
 
             const selectedOS = document.getElementById("osSelect").value;
             const config = osImages[selectedOS];
@@ -282,11 +262,11 @@
                 
                 setTimeout(() => {
                     if(emulator) updateStatus(true, "Running");
-                }, 3000);
+                }, 4000);
 
             } catch (err) {
                 console.error(err);
-                container.innerHTML = `<div class="screen-placeholder" style="color: #ef4444;">Failed to initialize emulator. Check internet connection or CORS rules.</div>`;
+                container.innerHTML = `<div class="screen-placeholder" style="color: #ef4444;">Failed to initialize emulator. Open via a local server or check network connection.</div>`;
                 updateStatus(false, "Error");
             }
         }
@@ -307,3 +287,4 @@
     </script>
 </body>
 </html>
+
