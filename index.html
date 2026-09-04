@@ -1,6 +1,3 @@
-This error happens because external CDROM images (like Alpine Linux ISOs) or BIOS files hosted on third-party links are often blocked by CORS (Cross-Origin Resource Sharing) security restrictions inside browsers, or the raw download links fail to pipe bytes properly to the emulator.
-To fix this reliably and bypass cross-origin blocks, the code below uses self-contained, pre-built disk image URLs hosted directly on public GitHub storage mirrors (copy/v86) built explicitly for browser execution.
-Save this updated code as index.html and run it through a local server (or deploy it to GitHub Pages/Vercel):
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -193,7 +190,7 @@ Save this updated code as index.html and run it through a local server (or deplo
             <div class="control-group">
                 <select id="osSelect">
                     <option value="dsl">Damn Small Linux (Desktop Environment)</option>
-                    <option value="linux">Minimal Linux CLI (Lightweight ISO)</option>
+                    <option value="linux">Minimal Linux CLI</option>
                 </select>
                 <button class="btn" onclick="startEmulator()">Boot OS</button>
             </div>
@@ -201,20 +198,20 @@ Save this updated code as index.html and run it through a local server (or deplo
         </div>
     </div>
 
-    <!-- v86 Engine Library -->
+    <!-- v86 Engine Library via jsDelivr CDN -->
     <script src="https://cdn.jsdelivr.net/gh/copy/v86@master/build/libv86.js"></script>
 
     <script>
         let emulator = null;
 
-        // Using reliable, CORS-friendly pre-built public images from the v86 project repository
+        // Using jsDelivr proxy for the raw image repository to safely satisfy CORS requirements on static hosts
         const osImages = {
             dsl: {
-                cdrom: { url: "https://raw.githubusercontent.com/copy/v86/master/images/dsl.iso" },
+                cdrom: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/images/dsl.iso" },
                 memory: 64 * 1024 * 1024
             },
             linux: {
-                cdrom: { url: "https://i.copy.sh/linux.iso" },
+                cdrom: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/images/linux.iso" },
                 memory: 64 * 1024 * 1024
             }
         };
@@ -266,7 +263,7 @@ Save this updated code as index.html and run it through a local server (or deplo
 
             } catch (err) {
                 console.error(err);
-                container.innerHTML = `<div class="screen-placeholder" style="color: #ef4444;">Failed to initialize emulator. Open via a local server or check network connection.</div>`;
+                container.innerHTML = `<div class="screen-placeholder" style="color: #ef4444;">Initialization failed. Check your browser console log.</div>`;
                 updateStatus(false, "Error");
             }
         }
@@ -287,4 +284,3 @@ Save this updated code as index.html and run it through a local server (or deplo
     </script>
 </body>
 </html>
-
