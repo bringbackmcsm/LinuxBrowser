@@ -3,201 +3,171 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Browser x86 Virtual Machine</title>
+    <title>Real TinyLinux Web OS</title>
+    
+    <!-- Using the official, active unpkg CDN for the emulator core -->
+    <script src="https://unpkg.com/v86@latest/build/libv86.js"></script>
+    
     <style>
-        :root {
-            --bg-primary: #0f172a;
-            --bg-secondary: #1e293b;
-            --accent: #2563eb;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --border: #334155;
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-            background-color: var(--bg-primary);
-            color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            padding: 12px;
-        }
-
-        .vm-card {
-            width: 100%;
-            max-width: 720px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 10px;
+        body, html {
+            margin: 0; padding: 0; 
+            height: 100%; width: 100%;
+            background-color: #000; color: #0f0;
+            font-family: monospace; 
             overflow: hidden;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            display: flex; flex-direction: column;
         }
-
-        .vm-header {
-            padding: 12px 16px;
-            background: rgba(0, 0, 0, 0.2);
-            border-bottom: 1px solid var(--border);
-            font-size: 0.9rem;
-            font-weight: 600;
+        #toolbar {
+            background-color: #1a1a1a; padding: 10px; 
+            display: flex; gap: 10px; flex-wrap: wrap;
+            border-bottom: 2px solid #333; 
+            align-items: center; justify-content: space-between;
         }
-
-        /* Essential container configuration required by v86 */
+        .btn {
+            background: #444; color: #fff; border: 1px solid #666; 
+            padding: 8px 14px; cursor: pointer; font-size: 14px; 
+            border-radius: 4px; font-family: sans-serif; font-weight: bold;
+        }
+        .btn:active { background: #666; }
+        .btn:hover { background: #555; }
+        
         #screen_container {
-            width: 100%;
-            height: 400px;
+            flex-grow: 1; display: flex; 
+            justify-content: center; align-items: center;
+            overflow: auto; 
             background: #000;
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
         }
-
-        /* v86 internal canvas mapping elements */
-        #screen_container div, #screen_container canvas {
-            max-width: 100%;
-            max-height: 100%;
+        
+        #screen_container > div {
+            transform-origin: center center;
         }
-
-        .vm-footer {
-            padding: 12px 16px;
-            display: flex;
-            gap: 10px;
-            background: var(--bg-secondary);
-            border-top: 1px solid var(--border);
-            flex-wrap: wrap;
+        canvas {
+            max-width: 100%; max-height: 100%; object-fit: contain;
         }
-
-        select, button {
-            padding: 8px 14px;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            border: 1px solid var(--border);
-            outline: none;
-        }
-
-        select {
-            flex: 1;
-            background: var(--bg-primary);
-            color: var(--text-main);
-            cursor: pointer;
-        }
-
-        button {
-            background: var(--accent);
-            color: white;
-            border: none;
-            font-weight: 500;
-            cursor: pointer;
-        }
-
-        button:active { opacity: 0.9; }
-
-        .btn-off {
-            background: #ef4444;
-        }
-
-        @media (max-width: 600px) {
-            .vm-card { border: none; border-radius: 0; height: 100vh; display: flex; flex-direction: column; }
-            #screen_container { flex: 1; height: auto; }
-            .vm-footer { flex-direction: column; }
-        }
+        #status { color: #aaa; font-size: 13px; font-family: sans-serif; }
     </style>
 </head>
 <body>
 
-    <div class="vm-card">
-        <div class="vm-header">
-            <span>Virtual Machine Environment</span>
+    <div id="toolbar">
+        <div>
+            <button class="btn" id="saveBtn">💾 Save State</button>
+            <button class="btn" id="resetBtn">🔄 Reboot</button>
+            <button class="btn" id="kbdBtn">⌨️ Mobile Keyboard</button>
         </div>
-
-        <!-- The target container that v86 hooks into -->
-        <div id="screen_container">
-            <div style="color: var(--text-muted); font-family: monospace; font-size: 0.85rem; text-align: center; padding: 20px;">
-                Press "Boot Virtual Machine" to initialize.
-            </div>
-        </div>
-
-        <div class="vm-footer">
-            <select id="osSelect">
-                <option value="kolibri">KolibriOS (Graphical - 1.4MB)</option>
-                <option value="linux">Minimal Linux CLI (18MB)</option>
-            </select>
-            <button onclick="bootVM()">Boot Virtual Machine</button>
-            <button class="btn-off" onclick="shutdownVM()">Power Off</button>
-        </div>
+        <div id="status">Booting TinyLinux...</div>
+    </div>
+    
+    <div id="screen_container">
+        <div style="white-space: pre; font: 14px monospace; line-height: 14px"></div>
+        <canvas style="display: none"></canvas>
     </div>
 
-    <!-- Official v86 script loader library -->
-    <script src="https://cdn.jsdelivr.net/gh/copy/v86@master/build/libv86.js"></script>
-
     <script>
-        let emulator = null;
+        const DB_NAME = "LinuxOS_Database";
+        const STORE_NAME = "v86_states";
+        
+        function getDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = e => e.target.result.createObjectStore(STORE_NAME);
+                req.onsuccess = e => resolve(e.target.result);
+                req.onerror = e => reject(e.target.error);
+            });
+        }
 
-        const profiles = {
-            kolibri: {
-                fda: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/images/kolibri.img" },
-                memory_size: 64 * 1024 * 1024
-            },
-            linux: {
-                cdrom: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/images/linux4.iso" },
-                memory_size: 128 * 1024 * 1024
-            }
-        };
+        async function saveStateToDB(buffer) {
+            const db = await getDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, "readwrite");
+                const store = tx.objectStore(STORE_NAME);
+                store.put(buffer, "savestate");
+                tx.oncomplete = resolve;
+                tx.onerror = reject;
+            });
+        }
 
-        function bootVM() {
-            if (emulator) {
-                emulator.destroy();
-                emulator = null;
-            }
+        async function loadStateFromDB() {
+            const db = await getDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, "readonly");
+                const store = tx.objectStore(STORE_NAME);
+                const req = store.get("savestate");
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = reject;
+            });
+        }
 
-            const container = document.getElementById("screen_container");
-            container.innerHTML = ""; // Clear text prompt safely before mounting canvas
-
-            const profileKey = document.getElementById("osSelect").value;
-            const profile = profiles[profileKey];
+        window.onload = async function() {
+            const statusEl = document.getElementById("status");
+            
+            let emulatorConfig = {
+                wasm_path: "https://unpkg.com/v86@latest/build/v86.wasm",
+                memory_size: 128 * 1024 * 1024,
+                vga_memory_size: 8 * 1024 * 1024,
+                screen_container: document.getElementById("screen_container"),
+                bios: { url: "https://unpkg.com/v86@latest/bios/seabios.bin" },
+                vga_bios: { url: "https://unpkg.com/v86@latest/bios/vgabios.bin" },
+                cdrom: { url: "https://copy.sh/v86/images/linux3.iso" },
+                autostart: true
+                // Network relay removed to prevent hanging during boot
+            };
 
             try {
-                // Config layout based strictly on v86 specifications
-                const config = {
-                    wasm_path: "https://cdn.jsdelivr.net/gh/copy/v86@master/build/v86.wasm",
-                    screen_container: container,
-                    bios: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/bios/seabios.bin" },
-                    vga_bios: { url: "https://cdn.jsdelivr.net/gh/copy/v86@master/bios/vgabios.bin" },
-                    memory_size: profile.memory_size,
-                    vga_memory_size: 2 * 1024 * 1024,
-                    autostart: true,
-                };
-
-                if (profile.fda) config.fda = profile.fda;
-                if (profile.cdrom) config.cdrom = profile.cdrom;
-
-                // Instantiate using V86Starter
-                emulator = new V86Starter(config);
-
-            } catch (err) {
-                console.error("VM initialization error:", err);
-                container.innerHTML = `<div style="color: #ef4444; padding: 20px; font-family: monospace;">Boot Error: ${err.message}</div>`;
+                const savedState = await loadStateFromDB();
+                if (savedState && savedState.byteLength > 0) {
+                    emulatorConfig.initial_state = { buffer: savedState };
+                }
+            } catch (e) {
+                console.log("Starting fresh boot.");
             }
-        }
 
-        function shutdownVM() {
-            if (emulator) {
-                emulator.destroy();
-                emulator = null;
-            }
-            const container = document.getElementById("screen_container");
-            container.innerHTML = `
-                <div style="color: var(--text-muted); font-family: monospace; font-size: 0.85rem; text-align: center; padding: 20px;">
-                    Virtual machine powered off.
-                </div>
-            `;
-        }
+            window.emulator = new V86Starter(emulatorConfig);
+
+            emulator.add_listener("emulator-ready", function() {
+                statusEl.innerText = "System Running.";
+            });
+
+            emulator.add_listener("download-progress", function(e) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                statusEl.innerText = `Downloading OS image... ${percent}%`;
+            });
+
+            document.getElementById("saveBtn").onclick = async () => {
+                if(!emulator.is_running()) return;
+                statusEl.innerText = "Saving Machine State...";
+                const stateBuffer = await emulator.save_state();
+                await saveStateToDB(stateBuffer);
+                statusEl.innerText = "State Saved!";
+                setTimeout(() => statusEl.innerText = "System Running.", 2000);
+            };
+
+            document.getElementById("resetBtn").onclick = () => {
+                if(confirm("Reboot and lose unsaved RAM data?")) {
+                    emulator.restart();
+                }
+            };
+
+            document.getElementById("kbdBtn").onclick = () => {
+                let kbd = document.getElementById("mobileKbd");
+                if (!kbd) {
+                    kbd = document.createElement("textarea");
+                    kbd.id = "mobileKbd";
+                    kbd.style.position = "absolute";
+                    kbd.style.opacity = "0";
+                    kbd.style.top = "-1000px";
+                    document.body.appendChild(kbd);
+                }
+                kbd.focus();
+            };
+
+            setInterval(async () => {
+                if (emulator && emulator.is_running()) {
+                    const stateBuffer = await emulator.save_state();
+                    await saveStateToDB(stateBuffer);
+                }
+            }, 180000); 
+        };
     </script>
 </body>
 </html>
