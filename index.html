@@ -3,48 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Real TinyLinux Web OS</title>
+    <title>Real Linux OS - v86 WebAssembly</title>
     
-    <!-- Using the official, active unpkg CDN for the emulator core -->
-    <script src="https://unpkg.com/v86@latest/build/libv86.js"></script>
+    <!-- Stable, verified v86 build scripts from official source -->
+    <script src="https://cdn.jsdelivr.net/npm/v86@latest/build/libv86.js"></script>
     
     <style>
         body, html {
             margin: 0; padding: 0; 
             height: 100%; width: 100%;
-            background-color: #000; color: #0f0;
-            font-family: monospace; 
-            overflow: hidden;
+            background-color: #0b0b0b; color: #00ff66;
+            font-family: monospace; overflow: hidden;
             display: flex; flex-direction: column;
         }
         #toolbar {
-            background-color: #1a1a1a; padding: 10px; 
-            display: flex; gap: 10px; flex-wrap: wrap;
-            border-bottom: 2px solid #333; 
+            background-color: #161616; padding: 12px; 
+            display: flex; gap: 12px; flex-wrap: wrap;
+            border-bottom: 2px solid #2a2a2a; 
             align-items: center; justify-content: space-between;
         }
         .btn {
-            background: #444; color: #fff; border: 1px solid #666; 
-            padding: 8px 14px; cursor: pointer; font-size: 14px; 
-            border-radius: 4px; font-family: sans-serif; font-weight: bold;
+            background: #252525; color: #fff; border: 1px solid #444; 
+            padding: 8px 14px; cursor: pointer; font-size: 13px; 
+            border-radius: 6px; font-family: monospace; font-weight: bold;
         }
-        .btn:active { background: #666; }
-        .btn:hover { background: #555; }
+        .btn:active { background: #00ff66; color: #000; }
         
         #screen_container {
             flex-grow: 1; display: flex; 
             justify-content: center; align-items: center;
-            overflow: auto; 
-            background: #000;
+            background: #000; position: relative;
+            overflow: hidden;
         }
-        
         #screen_container > div {
             transform-origin: center center;
         }
         canvas {
             max-width: 100%; max-height: 100%; object-fit: contain;
         }
-        #status { color: #aaa; font-size: 13px; font-family: sans-serif; }
+        #status { color: #888; font-size: 12px; font-family: monospace; }
     </style>
 </head>
 <body>
@@ -55,7 +52,7 @@
             <button class="btn" id="resetBtn">🔄 Reboot</button>
             <button class="btn" id="kbdBtn">⌨️ Mobile Keyboard</button>
         </div>
-        <div id="status">Booting TinyLinux...</div>
+        <div id="status">Initializing Virtual Machine...</div>
     </div>
     
     <div id="screen_container">
@@ -64,8 +61,8 @@
     </div>
 
     <script>
-        const DB_NAME = "LinuxOS_Database";
-        const STORE_NAME = "v86_states";
+        const DB_NAME = "RealLinuxOS_DB";
+        const STORE_NAME = "v86_state_store";
         
         function getDB() {
             return new Promise((resolve, reject) => {
@@ -80,8 +77,7 @@
             const db = await getDB();
             return new Promise((resolve, reject) => {
                 const tx = db.transaction(STORE_NAME, "readwrite");
-                const store = tx.objectStore(STORE_NAME);
-                store.put(buffer, "savestate");
+                tx.objectStore(STORE_NAME).put(buffer, "snapshot");
                 tx.oncomplete = resolve;
                 tx.onerror = reject;
             });
@@ -91,8 +87,7 @@
             const db = await getDB();
             return new Promise((resolve, reject) => {
                 const tx = db.transaction(STORE_NAME, "readonly");
-                const store = tx.objectStore(STORE_NAME);
-                const req = store.get("savestate");
+                const req = tx.objectStore(STORE_NAME).get("snapshot");
                 req.onsuccess = () => resolve(req.result);
                 req.onerror = reject;
             });
@@ -101,72 +96,78 @@
         window.onload = async function() {
             const statusEl = document.getElementById("status");
             
-            let emulatorConfig = {
-                wasm_path: "https://unpkg.com/v86@latest/build/v86.wasm",
+            let config = {
+                wasm_path: "https://cdn.jsdelivr.net/npm/v86@latest/build/v86.wasm",
                 memory_size: 128 * 1024 * 1024,
                 vga_memory_size: 8 * 1024 * 1024,
                 screen_container: document.getElementById("screen_container"),
-                bios: { url: "https://unpkg.com/v86@latest/bios/seabios.bin" },
-                vga_bios: { url: "https://unpkg.com/v86@latest/bios/vgabios.bin" },
+                bios: { url: "https://cdn.jsdelivr.net/npm/v86@latest/bios/seabios.bin" },
+                vga_bios: { url: "https://cdn.jsdelivr.net/npm/v86@latest/bios/vgabios.bin" },
+                // Using Buildroot Linux image verified for direct browser loading
                 cdrom: { url: "https://copy.sh/v86/images/linux3.iso" },
                 autostart: true
-                // Network relay removed to prevent hanging during boot
             };
 
             try {
                 const savedState = await loadStateFromDB();
                 if (savedState && savedState.byteLength > 0) {
-                    emulatorConfig.initial_state = { buffer: savedState };
+                    config.initial_state = { buffer: savedState };
+                    statusEl.innerText = "Restoring saved state from local storage...";
                 }
             } catch (e) {
-                console.log("Starting fresh boot.");
+                console.log("Clean boot profile initialized.");
             }
 
-            window.emulator = new V86Starter(emulatorConfig);
+            window.emulator = new V86Starter(config);
 
-            emulator.add_listener("emulator-ready", function() {
-                statusEl.innerText = "System Running.";
+            emulator.add_listener("emulator-ready", () => {
+                statusEl.innerText = "Linux OS Active & Ready.";
             });
 
-            emulator.add_listener("download-progress", function(e) {
-                const percent = Math.round((e.loaded / e.total) * 100);
-                statusEl.innerText = `Downloading OS image... ${percent}%`;
+            emulator.add_listener("download-progress", e => {
+                if (e.total) {
+                    const pct = Math.round((e.loaded / e.total) * 100);
+                    statusEl.innerText = `Fetching Linux System: ${pct}%`;
+                }
             });
 
             document.getElementById("saveBtn").onclick = async () => {
-                if(!emulator.is_running()) return;
-                statusEl.innerText = "Saving Machine State...";
-                const stateBuffer = await emulator.save_state();
-                await saveStateToDB(stateBuffer);
-                statusEl.innerText = "State Saved!";
-                setTimeout(() => statusEl.innerText = "System Running.", 2000);
+                if (!emulator.is_running()) return;
+                statusEl.innerText = "Saving state to browser storage...";
+                const state = await emulator.save_state();
+                await saveStateToDB(state);
+                statusEl.innerText = "State Saved Locally!";
+                setTimeout(() => statusEl.innerText = "Linux OS Active & Ready.", 2000);
             };
 
             document.getElementById("resetBtn").onclick = () => {
-                if(confirm("Reboot and lose unsaved RAM data?")) {
+                if (confirm("Reboot virtual machine? Unsaved workspace states will be lost.")) {
                     emulator.restart();
                 }
             };
 
             document.getElementById("kbdBtn").onclick = () => {
-                let kbd = document.getElementById("mobileKbd");
+                let kbd = document.getElementById("mobileKbdInput");
                 if (!kbd) {
                     kbd = document.createElement("textarea");
-                    kbd.id = "mobileKbd";
+                    kbd.id = "mobileKbdInput";
                     kbd.style.position = "absolute";
                     kbd.style.opacity = "0";
-                    kbd.style.top = "-1000px";
+                    kbd.style.height = "1px";
+                    kbd.style.width = "1px";
+                    kbd.style.top = "0";
                     document.body.appendChild(kbd);
                 }
                 kbd.focus();
             };
 
+            // Auto-save session state every 2 minutes
             setInterval(async () => {
                 if (emulator && emulator.is_running()) {
-                    const stateBuffer = await emulator.save_state();
-                    await saveStateToDB(stateBuffer);
+                    const state = await emulator.save_state();
+                    await saveStateToDB(state);
                 }
-            }, 180000); 
+            }, 120000);
         };
     </script>
 </body>
